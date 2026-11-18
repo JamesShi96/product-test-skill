@@ -1,6 +1,8 @@
 # 各平台怎么测
 
-开测前对要测的每一端跑一次"能用吗"那行命令。缺工具就告诉用户缺什么、怎么装或怎么打开（如 computer-use：「Claude 桌面 App → 设置 → This computer → Computer use」），先测能测的。
+开测前对要测的每一端跑一次"能用吗"那行命令。缺工具先看这一端有没有替代路线；都不行再告诉用户缺什么、怎么装或怎么打开（如 computer-use：「Claude 桌面 App → 设置 → This computer → Computer use」），先测能测的。
+
+**自己的 App 的 Debug 包通常连本地开发服务**，那可能是用户正在用的服务和数据。编译时把 API 地址改到隔离环境或一个没人用的端口（看项目怎么配地址：Info.plist、xcconfig、`.env`、build setting）；不需要后端的界面优先用 App 自带的预览 / 演示模式。
 
 命令里的 `<run>` 指本次 run 目录，`<scratchpad>` 指会话的临时目录（没有就用 `<run>/tmp`）。临时安装、编译产物、空的测试目录都放 `<scratchpad>`，不放进被测项目。
 
@@ -26,12 +28,14 @@ Playwright、adb、simctl 自己就能存文件。Claude in Chrome 和 computer-
 |---|---|
 | Claude in Chrome | 测自己的产品时首选：用用户自己的 Chrome 和登录态，能录 GIF、看 console 和网络请求。测别人的产品时开无痕窗口或新 profile，不在用户已登录的账号里操作。用前加载它的 skill |
 | 内置浏览器 | Chrome 扩展没连上时；测别人产品的"新用户体验"也适合，没有登录态 |
-| Playwright 无头浏览器 | 前两个都不行，或交给子代理批量重放时 |
+| Playwright 无头浏览器 | 屏幕被别的测试占着、要没有登录态的干净会话、要并行或交给子代理时首选；前两个都不行时也用它 |
 
-- **能用吗**：列一次标签页（Chrome）；或 `npx playwright --version`
-- **手机宽度**：Chrome 里把窗口调到 375 宽；Playwright 用 `devices['iPhone 13']` 模拟
+- **能用吗**：列一次标签页（Chrome）；Playwright 要真的启动一次浏览器才算数，`--version` 能跑不代表浏览器装对了：`node -e "require('playwright').chromium.launch().then(b=>b.close()).then(()=>console.log('ok'))"`
+- **手机宽度**：Chrome 里把窗口调到 375 宽；Playwright 用 `devices['iPhone SE']`（375×667，`iPhone 13` 是 390 宽）。手机上点按用 `page.touchscreen.tap(x, y)`，`page.mouse` 发的是鼠标事件
 - **Playwright 临时装**：在 `<scratchpad>` 里 `npm i playwright && npx playwright install chromium`，不要装进被测项目
-- **Playwright 要接上的**：`page.on('console')`、`page.on('pageerror')`、`page.on('requestfailed')` 和 4xx/5xx 响应都记下来；录屏用 `browser.newContext({ recordVideo: { dir: '<run>' } })`
+- **一步一步地测用 `scripts/pw-driver.js`**：常驻一个无头浏览器，带电脑和手机两个会话，每一步发一段代码过去，自动截图，并带回这一步的 console 报错、失败请求、弹窗和下载。用法写在脚本开头。不要每一步都写一个新脚本从头开浏览器，状态会丢
+- **下载**：pw-driver 已经接好（存进 run 目录）。网站用浏览器原生"另存为"（`showSaveFilePicker`）时，无头浏览器里会被取消，用 `PW_NO_FS_PICKER=1` 让它退回普通下载，并在报告里记一条 ENV：真实的保存框没测到
+- **浏览器版本对不上**（报 Executable doesn't exist）：`npx playwright install chromium`，或用 `PW_EXE` 指向 `~/Library/Caches/ms-playwright/` 里已有的 `chrome-headless-shell`
 - **性能和无障碍参考**（可选）：`npx lighthouse <url> --only-categories=performance,accessibility --output=html --output-path=<run>/lighthouse.html`。只当参考，以亲眼看到的为准
 
 ## Android（模拟器或真机）
@@ -55,19 +59,25 @@ Playwright、adb、simctl 自己就能存文件。Claude in Chrome 和 computer-
 
 ## iOS 模拟器
 
-`xcrun simctl` 能装、启动、截图、录屏、改系统设置，但**不能点按**。点按用 computer-use 操作 Simulator 窗口（用前加载它的 skill，并请用户授权 Simulator）。开了多台模拟器时，用 `xcrun simctl list devices booted` 拿到 UDID，命令里用 UDID 代替 `booted`。
+`xcrun simctl` 能装、启动、截图、录屏、改系统设置，但**不能点按**。点按有两条路：
 
-- **能用吗**：`xcrun simctl list devices available`；`xcrun simctl boot "<设备名>" && open -a Simulator`
-- **编译自己的 App**：`xcodebuild -scheme <scheme> -destination 'platform=iOS Simulator,name=<设备名>' -derivedDataPath <scratchpad>/build build`，再 `xcrun simctl install booted <scratchpad>/build/Build/Products/Debug-iphonesimulator/<App>.app`。用 CocoaPods 的项目（React Native、Flutter 等）先 `pod install`，并加 `-workspace ios/<名字>.xcworkspace`；React Native 的 Debug 包同样要先起 Metro
-- **启动 / 打开链接**：`xcrun simctl launch booted <bundle id>`；`xcrun simctl openurl booted "<url>"`
-- **截图**：`xcrun simctl io booted screenshot <run>/01.png`
-- **录屏**：`xcrun simctl io booted recordVideo <run>/flow.mp4`，后台跑，停法见开头
-- **放测试照片进相册**：`xcrun simctl addmedia booted <照片路径>`
-- **权限**：`xcrun simctl privacy booted reset all <bundle id>`（下次重新弹窗）；`revoke photos <bundle id>` 测拒绝后的表现
-- **深色模式、大字体**：`xcrun simctl ui booted appearance dark`；`xcrun simctl ui booted content_size accessibility-large`
-- **定位、推送**：`xcrun simctl location booted set <纬度>,<经度>`；`xcrun simctl push booted <bundle id> <payload.json>`
-- **日志**：`xcrun simctl spawn booted log stream --timeout 10m --predicate 'process == "<App名>" AND messageType == error' > <run>/ios.log`，后台跑
-- **项目有 UI 测试**（XCUITest）时，可以照着它的写法补一段测试来重放复现步骤
+1. **computer-use** 操作 Simulator 窗口（用前加载它的 skill，并请用户授权 Simulator）。最像真人
+2. **XCUITest 代替手指**（没有 computer-use，或要反复重放时）：只能测自己有代码的 App。在临时拷贝里加一个 UI 测试类，按新用户的路径一步步点，每步 `XCUIScreen.main.screenshot()` 存成 PNG 写进 run 目录（目录用 `TEST_RUNNER_<变量名>` 环境变量传给测试）。`xcodebuild build-for-testing` 编一次，之后用 `test-without-building -only-testing:<目标>/<类>/<方法>` 反复跑。**判断看截图，不看测试是否通过**；已有测试的断言不算结论
+
+下面的命令都用 UDID，不用 `booted`（`xcrun simctl list devices booted` 查）。
+
+- **能用吗**：`xcrun simctl list devices available`；`xcrun simctl boot <UDID> && open -a Simulator`
+- **要小屏机测大字体**（checklist 要求的 iPhone SE）：`xcrun simctl list runtimes` 找到 iOS 运行时，`xcrun simctl create PT-SE com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation <runtime id>`，测完 `xcrun simctl delete <UDID>`。每次测试新建，不用用户自己的模拟器
+- **改动还没提交、又要加临时测试**：先 `rsync -a --exclude build --exclude .git --exclude node_modules <项目>/ <scratchpad>/app-copy/`，在拷贝里改和编译，不碰用户的工作区。用 XcodeGen 的项目在拷贝里 `xcodegen generate`，或把测试方法加进已有的测试文件，免得改工程文件
+- **编译自己的 App**：`xcodebuild -project <名字>.xcodeproj -scheme <scheme> -destination 'platform=iOS Simulator,id=<UDID>' -derivedDataPath <scratchpad>/dd -resultBundlePath <scratchpad>/r1.xcresult CODE_SIGNING_ALLOWED=NO build`，再 `xcrun simctl install <UDID> <scratchpad>/dd/Build/Products/Debug-iphonesimulator/<App>.app`。用 CocoaPods 的项目（React Native、Flutter 等）先 `pod install`，并把 `-project` 换成 `-workspace ios/<名字>.xcworkspace`；React Native 的 Debug 包同样要先起 Metro。API 地址按开头说的改掉
+- **启动 / 打开链接**：`xcrun simctl launch <UDID> <bundle id>`；`xcrun simctl openurl <UDID> "<url>"`
+- **截图**：`xcrun simctl io <UDID> screenshot <run>/01.png`
+- **录屏**：`xcrun simctl io <UDID> recordVideo <run>/flow.mp4`，后台跑，停法见开头
+- **放测试照片进相册**：`xcrun simctl addmedia <UDID> <照片路径>`
+- **权限**：`xcrun simctl privacy <UDID> reset all <bundle id>`（下次重新弹窗）；`revoke photos <bundle id>` 测拒绝后的表现
+- **深色模式、大字体**：`xcrun simctl ui <UDID> appearance dark`；`xcrun simctl ui <UDID> content_size accessibility-large`
+- **定位、推送**：`xcrun simctl location <UDID> set <纬度>,<经度>`；`xcrun simctl push <UDID> <bundle id> <payload.json>`
+- **日志**：`xcrun simctl spawn <UDID> log stream --timeout 10m --predicate 'process == "<App名>" AND messageType == error AND NOT subsystem BEGINSWITH "com.apple.dt"' > <run>/ios.log`，后台跑（XCUITest 驱动时不排除 `com.apple.dt` 会被自动化日志刷屏）
 - App Store 上的 App 装不进模拟器，看下一节
 
 ## App Store 上的 iPhone App（别人的 App）
