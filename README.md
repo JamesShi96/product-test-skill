@@ -45,3 +45,7 @@ git clone https://github.com/JamesShi96/product-test-skill.git ~/.claude/skills/
 - `references/checklist.md`：测什么（通用问题、按产品类型的检查项、评测维度）
 - `references/tools.md`：各平台的具体命令
 - `references/templates.md`：产品档案、测试报告、评测报告、交给子代理的说明
+
+## 许可证
+
+MIT
