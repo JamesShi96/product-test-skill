@@ -62,7 +62,7 @@ Playwright、adb、simctl 自己就能存文件。Claude in Chrome 和 computer-
 `xcrun simctl` 能装、启动、截图、录屏、改系统设置，但**不能点按**。点按有两条路：
 
 1. **computer-use** 操作 Simulator 窗口（用前加载它的 skill，并请用户授权 Simulator）。最像真人
-2. **XCUITest 代替手指**（没有 computer-use，或要反复重放时）：只能测自己有代码的 App。在临时拷贝里加一个 UI 测试类，按新用户的路径一步步点，每步 `XCUIScreen.main.screenshot()` 存成 PNG 写进 run 目录（目录用 `TEST_RUNNER_<变量名>` 环境变量传给测试）。`xcodebuild build-for-testing` 编一次，之后用 `test-without-building -only-testing:<目标>/<类>/<方法>` 反复跑。**判断看截图，不看测试是否通过**；已有测试的断言不算结论
+2. **XCUITest 代替手指**（没有 computer-use，或要反复重放时）：只能测自己有代码的 App。在临时拷贝里加一个 UI 测试类，按新用户的路径一步步点，每步 `XCUIScreen.main.screenshot()` 存成 PNG 写进 run 目录（目录用 `TEST_RUNNER_<变量名>` 环境变量传给测试）。`xcodebuild build-for-testing` 编一次，之后用 `test-without-building -only-testing:<目标>/<类>/<方法>` 反复跑。**判断看截图，不看测试是否通过**；已有测试的断言不算结论。页面里有 WKWebView 时，不要遍历全部元素（`allElementsBoundByIndex` 会因网页元素变动报 snapshot 错误、整个测试失败），只按 identifier 取要看的元素。测试类里 `continueAfterFailure = true`，一步没找到不影响后面继续截图
 
 下面的命令都用 UDID，不用 `booted`（`xcrun simctl list devices booted` 查）。
 
@@ -73,7 +73,7 @@ Playwright、adb、simctl 自己就能存文件。Claude in Chrome 和 computer-
 - **启动 / 打开链接**：`xcrun simctl launch <UDID> <bundle id>`；`xcrun simctl openurl <UDID> "<url>"`
 - **截图**：`xcrun simctl io <UDID> screenshot <run>/01.png`
 - **录屏**：`xcrun simctl io <UDID> recordVideo <run>/flow.mp4`，后台跑，停法见开头
-- **放测试照片进相册**：`xcrun simctl addmedia <UDID> <照片路径>`
+- **放测试照片进相册**：`xcrun simctl addmedia <UDID> <照片路径>`。测"从相册里自动挑照片"这类功能时，放一组有对有错的：该挑出的（全身照）和该去掉的（半身、多人、单品图、杂物），看结果挑得对不对
 - **权限**：`xcrun simctl privacy <UDID> reset all <bundle id>`（下次重新弹窗）；`revoke photos <bundle id>` 测拒绝后的表现
 - **深色模式、大字体**：`xcrun simctl ui <UDID> appearance dark`；`xcrun simctl ui <UDID> content_size accessibility-large`
 - **定位、推送**：`xcrun simctl location <UDID> set <纬度>,<经度>`；`xcrun simctl push <UDID> <bundle id> <payload.json>`
